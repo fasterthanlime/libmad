@@ -1025,7 +1025,7 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 	bits       = ((32 - 1 - 21) + (21 - cachesz)) & ~7;
 	bitcache   = (bitcache << bits) | mad_bit_read(&peek, bits);
 	cachesz   += bits;
-    fprintf(stderr, "bits_left (before -= bits) = %d\n", bits_left);
+    fprintf(stderr, "bits_left (before -= bits) = %d, bits = %d, cachesz = %d\n", bits_left, bits, cachesz);
 	bits_left -= bits;
       }
 
