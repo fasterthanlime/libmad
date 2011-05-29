@@ -944,7 +944,6 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
   register unsigned long bitcache;
 
   bits_left = (signed) channel->part2_3_length - (signed) part2_length;
-  fprintf(stderr, "part2_3_length = %d, part2_length = %d, bits_left = %d\n", channel->part2_3_length, part2_length, bits_left);
   
   if (bits_left < 0)
     return MAD_ERROR_BADPART3LEN;
@@ -1029,8 +1028,13 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 	unsigned int bits;
 
 	bits       = ((32 - 1 - 21) + (21 - cachesz)) & ~7;
-	bitcache   = (bitcache << bits) | mad_bit_read(&peek, bits);
-	//fprintf(stderr, "bits_left (before -= bits) = %d, bits = %d, cachesz = %d\n", bits_left, bits, cachesz);
+	fprintf(stderr, "1) bitcache = %lu, cachesz = %d, clumpsz = %d\n", bitcache, cachesz, clumpsz);
+    unsigned long tls = (bitcache << bits);
+    unsigned long mbr = mad_bit_read(&peek, bits);
+    fprintf(stderr, "tls = %lu\nmbr = %lu\n", tls, mbr);
+    bitcache   = tls | mbr;
+    fprintf(stderr, "2) bitcache = %lu, cachesz = %d, clumpsz = %d\n", bitcache, cachesz, clumpsz);
+	fprintf(stderr, "bits_left (before -= bits) = %d, bits = %d, cachesz = %d\n", bits_left, bits, cachesz);
     cachesz   += bits;
     bits_left -= bits;
       }
@@ -1040,17 +1044,18 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
       clumpsz = startbits;
       pair    = &table[MASK(bitcache, cachesz, clumpsz)];
 
+      fprintf(stderr, "bitcache = %lu, cachesz = %d, clumpsz = %d\n", bitcache, cachesz, clumpsz);
       fprintf(stderr, "initial pair = %d, final? = %d\n", MASK(bitcache, cachesz, clumpsz), pair->final);
 
       while (!pair->final) {
 	cachesz -= clumpsz;
 
 	clumpsz = pair->ptr.bits;
-    fprintf(stderr, "next pair = %d, final? = %d\n", pair->ptr.offset + MASK(bitcache, cachesz, clumpsz), pair->final);
+    //fprintf(stderr, "next pair = %d, final? = %d\n", pair->ptr.offset + MASK(bitcache, cachesz, clumpsz), pair->final);
 	pair    = &table[pair->ptr.offset + MASK(bitcache, cachesz, clumpsz)];
       }
 
-      fprintf(stderr, "hlen = %d, linbits = %d, x = %d, y = %d\n", pair->value.hlen, linbits, pair->value.x, pair->value.y);
+      //fprintf(stderr, "hlen = %d, linbits = %d, x = %d, y = %d\n", pair->value.hlen, linbits, pair->value.x, pair->value.y);
       cachesz -= pair->value.hlen;
 
       if (linbits) {
@@ -1085,7 +1090,7 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 	  }
 
 	x_final:
-      fprintf(stderr, "doing x_final\n");
+      //fprintf(stderr, "doing x_final\n");
 	  xrptr[0] = MASK1BIT(bitcache, cachesz--) ?
 	    -requantized : requantized;
 	}
@@ -1121,7 +1126,7 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 	  }
 
 	y_final:
-      fprintf(stderr, "doing y_final\n");
+      //fprintf(stderr, "doing y_final\n");
 	  xrptr[1] = MASK1BIT(bitcache, cachesz--) ?
 	    -requantized : requantized;
 	}

@@ -230,7 +230,7 @@ int decode_header(struct mad_header *header, struct mad_stream *stream)
     header->crc_target = mad_bit_read(&stream->ptr, 16);
 
 
-  fprintf(stderr, "============= Decoding layer %d audio mode %d with %d bps and a samplerate of %d.\n",
+  fprintf(stderr, "============= Decoding layer %d audio mode %d with %d bps and a samplerate of %d\n",
     header->layer, header->mode, header->bitrate, header->samplerate);
 
   return 0;
