@@ -126,11 +126,18 @@ signed int scale(mad_fixed_t sample)
  * is to output (or play) the decoded PCM audio.
  */
 
+static int STEPS_COUNT = 0;
+
 static
 enum mad_flow output(void *data,
 		     struct mad_header const *header,
 		     struct mad_pcm *pcm)
 {
+  // DEBUG
+  if(STEPS_COUNT++ >= 4) exit(1);
+  return MAD_FLOW_CONTINUE;
+  // END DEBUG
+    
   unsigned int nchannels, nsamples;
   mad_fixed_t const *left_ch, *right_ch;
 

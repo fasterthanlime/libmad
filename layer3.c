@@ -25,6 +25,7 @@
 
 # include "global.h"
 
+# include <stdio.h>
 # include <stdlib.h>
 # include <string.h>
 
@@ -841,7 +842,6 @@ void III_exponents(struct channel const *channel,
     }
 
     /* this is probably wrong for 8000 Hz short/mixed blocks */
-
     gain0 = gain - 8 * (signed int) channel->subblock_gain[0];
     gain1 = gain - 8 * (signed int) channel->subblock_gain[1];
     gain2 = gain - 8 * (signed int) channel->subblock_gain[2];
@@ -1025,6 +1025,7 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 	bits       = ((32 - 1 - 21) + (21 - cachesz)) & ~7;
 	bitcache   = (bitcache << bits) | mad_bit_read(&peek, bits);
 	cachesz   += bits;
+    fprintf(stderr, "bits_left (before -= bits) = %d\n", bits_left);
 	bits_left -= bits;
       }
 
@@ -1154,6 +1155,8 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
       xrptr += 2;
     }
   }
+  
+  fprintf(stderr, "bits_left (before big_values overrun) = %d\n", bits_left);
 
   if (cachesz + bits_left < 0)
     return MAD_ERROR_BADHUFFDATA;  /* big_values overrun */
@@ -1252,12 +1255,14 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 
   assert(-bits_left <= MAD_BUFFER_GUARD * CHAR_BIT);
 
-# if 0 && defined(DEBUG)
+//# if 0 && defined(DEBUG)
   if (bits_left < 0)
     fprintf(stderr, "read %d bits too many\n", -bits_left);
   else if (cachesz + bits_left > 0)
     fprintf(stderr, "%d stuffing bits\n", cachesz + bits_left);
-# endif
+  else
+    fprintf(stderr, "bits_left = %d\n", bits_left);
+//# endif
 
   /* rzero */
   while (xrptr < &xr[576]) {
@@ -2368,10 +2373,14 @@ enum mad_error III_decode(struct mad_bitptr *ptr, struct mad_frame *frame,
     if (header->flags & MAD_FLAG_MPEG_2_5_EXT)
       sfreqi += 3;
   }
+  
+  //fprintf(stderr, "[Amosdebug] [III_decode] sfreqi = %u\n", sfreqi);
 
   /* scalefactors, Huffman decoding, requantization */
 
   ngr = (header->flags & MAD_FLAG_LSF_EXT) ? 1 : 2;
+  
+  //fprintf(stderr, "[Amosdebug] [III_decode] %d granules to process\n", ngr);
 
   for (gr = 0; gr < ngr; ++gr) {
     struct granule *granule = &si->gr[gr];
@@ -2381,10 +2390,14 @@ enum mad_error III_decode(struct mad_bitptr *ptr, struct mad_frame *frame,
     enum mad_error error;
 
     for (ch = 0; ch < nch; ++ch) {
+      //fprintf(stderr, "[Amosdebug] [III_decode] handling channel %d\n", ch);
+      
       struct channel *channel = &granule->ch[ch];
       unsigned int part2_length;
 
       sfbwidth[ch] = sfbwidth_table[sfreqi].l;
+      
+      //fprintf(stderr, "[Amosdebug] [III_decode] sfbwidth = %d\n", sfbwidth[ch]);
       if (channel->block_type == 2) {
 	sfbwidth[ch] = (channel->flags & mixed_block_flag) ?
 	  sfbwidth_table[sfreqi].m : sfbwidth_table[sfreqi].s;
@@ -2572,6 +2585,9 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
 
   error = III_sideinfo(&stream->ptr, nch, header->flags & MAD_FLAG_LSF_EXT,
 		       &si, &data_bitlen, &priv_bitlen);
+               
+  fprintf(stderr, "We're at %d, data_bitlen = %d, priv_bitlen = %d\n", stream->ptr.byte - stream->buffer, data_bitlen, priv_bitlen);
+               
   if (error && result == 0) {
     stream->error = error;
     result = -1;
@@ -2589,7 +2605,9 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
     mad_bit_init(&peek, stream->next_frame);
 
     header = mad_bit_read(&peek, 32);
+    
     if ((header & 0xffe60000L) /* syncword | layer */ == 0xffe20000L) {
+        
       if (!(header & 0x00010000L))  /* protection_bit */
 	mad_bit_skip(&peek, 16);  /* crc_check */
 
@@ -2604,20 +2622,36 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
 
   frame_space = stream->next_frame - mad_bit_nextbyte(&stream->ptr);
 
+  /*
+  fprintf(stderr, "next_frame = %d, nextbyte = %d, frame_space = %d\n",
+    stream->next_frame - stream->buffer,
+    mad_bit_nextbyte(&stream->ptr) - stream->buffer,
+    frame_space
+  );
+  */
+  
+  //fprintf(stderr, "before, next_md_begin = %d\n", next_md_begin);
+
   if (next_md_begin > si.main_data_begin + frame_space)
     next_md_begin = 0;
+
+  //fprintf(stderr, "so far, md_len = %d, si.main_data_begin = %d, frame_space = %d, next_md_begin = %d\n",
+  //  md_len, si.main_data_begin, frame_space, next_md_begin);
 
   md_len = si.main_data_begin + frame_space - next_md_begin;
 
   frame_used = 0;
 
   if (si.main_data_begin == 0) {
+    //fprintf(stderr, "[Amosdebug] [layer3] main_data_begin == 0, simplest case\n");
     ptr = stream->ptr;
     stream->md_len = 0;
 
     frame_used = md_len;
   }
   else {
+    //fprintf(stderr, "[Amosdebug] [layer3] main_data_begin == %d, byte wrangling case\n", si.main_data_begin);
+    //fprintf(stderr, "si.main_data_begin = %d, stream.md_len = %d\n", si.main_data_begin, stream->md_len);
     if (si.main_data_begin > stream->md_len) {
       if (result == 0) {
 	stream->error = MAD_ERROR_BADDATAPTR;
@@ -2645,6 +2679,8 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
   /* decode main_data */
 
   if (result == 0) {
+    //fprintf(stderr, "[Amosdebug] [layer3] Going to III_decode, nch = %d. bufend - ptr = %d\n", nch, stream->bufend - ptr.byte);
+    //fprintf(stderr, "[Amosdebug] [layer3] ...skiplen = %d, sync? = %d\n", stream->skiplen, stream->sync);
     error = III_decode(&ptr, frame, &si, nch);
     if (error) {
       stream->error = error;
@@ -2657,13 +2693,13 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
     stream->anc_bitlen = md_len * CHAR_BIT - data_bitlen;
   }
 
-# if 0 && defined(DEBUG)
+//# if 0 && defined(DEBUG)
   fprintf(stderr,
 	  "main_data_begin:%u, md_len:%u, frame_free:%u, "
 	  "data_bitlen:%u, anc_bitlen: %u\n",
 	  si.main_data_begin, md_len, frame_free,
 	  data_bitlen, stream->anc_bitlen);
-# endif
+//# endif
 
   /* preload main_data buffer with up to 511 bytes for next frame(s) */
 

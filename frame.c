@@ -229,6 +229,10 @@ int decode_header(struct mad_header *header, struct mad_stream *stream)
   if (header->flags & MAD_FLAG_PROTECTION)
     header->crc_target = mad_bit_read(&stream->ptr, 16);
 
+
+  fprintf(stderr, "============= Decoding layer %d audio mode %d with %d bps and a samplerate of %d.\n",
+    header->layer, header->mode, header->bitrate, header->samplerate);
+
   return 0;
 }
 
@@ -410,6 +414,8 @@ int mad_header_decode(struct mad_header *header, struct mad_stream *stream)
 
   stream->next_frame = stream->this_frame + N;
 
+  fprintf(stderr, "N = %d, pad_slot = %d, next_frame = %d\n", N, pad_slot, stream->next_frame - stream->buffer);
+
   if (!stream->sync) {
     /* check that a valid frame header follows this frame */
 
@@ -450,8 +456,7 @@ int mad_frame_decode(struct mad_frame *frame, struct mad_stream *stream)
   /* audio_data() */
 
   frame->header.flags &= ~MAD_FLAG_INCOMPLETE;
-
-  fprintf(stderr, "[Amosdebug] Decoding some audio layer %d audio. Interesting.\n", frame->header.layer);
+    
   if (decoder_table[frame->header.layer - 1](stream, frame) == -1) {
     if (!MAD_RECOVERABLE(stream->error))
       stream->next_frame = stream->this_frame;
