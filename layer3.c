@@ -48,6 +48,8 @@
 
 /* --- Layer III ----------------------------------------------------------- */
 
+static struct mad_stream *GLOBAL_STREAM = NULL;
+
 enum {
   count1table_select = 0x01,
   scalefac_scale     = 0x02,
@@ -955,11 +957,10 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 
   /* align bit reads to byte boundaries */
   cachesz  = mad_bit_bitsleft(&peek);
-  fprintf(stderr, "cachesz bitsleft = %d\n", cachesz);
   cachesz += ((32 - 1 - 24) + (24 - cachesz)) & ~7;
-  fprintf(stderr, "cachesz bitswrangling = %d\n", cachesz);
 
   bitcache   = mad_bit_read(&peek, cachesz);
+  fprintf(stderr, "bitcache peek.read = %lu\n", bitcache);
   bits_left -= cachesz;
 
   xrptr = &xr[0];
@@ -1022,19 +1023,15 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 	++expptr;
       }
 
-	fprintf(stderr, "cachesz = %d\n", cachesz);
+	//fprintf(stderr, "cachesz = %d\n", cachesz);
 
       if (cachesz < 21) {
 	unsigned int bits;
 
 	bits       = ((32 - 1 - 21) + (21 - cachesz)) & ~7;
-	fprintf(stderr, "1) bitcache = %lu, cachesz = %d, clumpsz = %d\n", bitcache, cachesz, clumpsz);
     unsigned long tls = (bitcache << bits);
     unsigned long mbr = mad_bit_read(&peek, bits);
-    fprintf(stderr, "tls = %lu\nmbr = %lu\n", tls, mbr);
     bitcache   = tls | mbr;
-    fprintf(stderr, "2) bitcache = %lu, cachesz = %d, clumpsz = %d\n", bitcache, cachesz, clumpsz);
-	fprintf(stderr, "bits_left (before -= bits) = %d, bits = %d, cachesz = %d\n", bits_left, bits, cachesz);
     cachesz   += bits;
     bits_left -= bits;
       }
@@ -1044,18 +1041,13 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
       clumpsz = startbits;
       pair    = &table[MASK(bitcache, cachesz, clumpsz)];
 
-      fprintf(stderr, "bitcache = %lu, cachesz = %d, clumpsz = %d\n", bitcache, cachesz, clumpsz);
-      fprintf(stderr, "initial pair = %d, final? = %d\n", MASK(bitcache, cachesz, clumpsz), pair->final);
-
       while (!pair->final) {
 	cachesz -= clumpsz;
 
 	clumpsz = pair->ptr.bits;
-    //fprintf(stderr, "next pair = %d, final? = %d\n", pair->ptr.offset + MASK(bitcache, cachesz, clumpsz), pair->final);
 	pair    = &table[pair->ptr.offset + MASK(bitcache, cachesz, clumpsz)];
       }
 
-      //fprintf(stderr, "hlen = %d, linbits = %d, x = %d, y = %d\n", pair->value.hlen, linbits, pair->value.x, pair->value.y);
       cachesz -= pair->value.hlen;
 
       if (linbits) {
@@ -1090,7 +1082,6 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 	  }
 
 	x_final:
-      //fprintf(stderr, "doing x_final\n");
 	  xrptr[0] = MASK1BIT(bitcache, cachesz--) ?
 	    -requantized : requantized;
 	}
@@ -1126,7 +1117,6 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 	  }
 
 	y_final:
-      //fprintf(stderr, "doing y_final\n");
 	  xrptr[1] = MASK1BIT(bitcache, cachesz--) ?
 	    -requantized : requantized;
 	}
@@ -1170,12 +1160,12 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
       }
 
       xrptr += 2;
-      fprintf(stderr, "big_values = %d, cachesz = %d, bits_left = %d, xrptr = %d\n",
-        big_values, cachesz, bits_left, xrptr - &xr[0]);
+      //fprintf(stderr, "big_values = %d, cachesz = %d, bits_left = %d, xrptr = %d\n",
+      //  big_values, cachesz, bits_left, xrptr - &xr[0]);
     }
   }
   
-  fprintf(stderr, "bits_left (before big_values overrun) = %d\n", bits_left);
+  //fprintf(stderr, "bits_left (before big_values overrun) = %d\n", bits_left);
 
   if (cachesz + bits_left < 0)
     return MAD_ERROR_BADHUFFDATA;  /* big_values overrun */
@@ -1274,14 +1264,14 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 
   assert(-bits_left <= MAD_BUFFER_GUARD * CHAR_BIT);
 
-//# if 0 && defined(DEBUG)
+# if 0 && defined(DEBUG)
   if (bits_left < 0)
     fprintf(stderr, "read %d bits too many\n", -bits_left);
   else if (cachesz + bits_left > 0)
     fprintf(stderr, "%d stuffing bits\n", cachesz + bits_left);
   else
     fprintf(stderr, "bits_left = %d\n", bits_left);
-//# endif
+# endif
 
   /* rzero */
   while (xrptr < &xr[576]) {
@@ -2547,6 +2537,8 @@ enum mad_error III_decode(struct mad_bitptr *ptr, struct mad_frame *frame,
  */
 int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
 {
+  GLOBAL_STREAM = stream;
+    
   struct mad_header *header = &frame->header;
   unsigned int nch, priv_bitlen, next_md_begin = 0;
   unsigned int si_len, data_bitlen, md_len;
@@ -2672,24 +2664,27 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
     //fprintf(stderr, "[Amosdebug] [layer3] main_data_begin == %d, byte wrangling case\n", si.main_data_begin);
     //fprintf(stderr, "si.main_data_begin = %d, stream.md_len = %d\n", si.main_data_begin, stream->md_len);
     if (si.main_data_begin > stream->md_len) {
-      if (result == 0) {
-	stream->error = MAD_ERROR_BADDATAPTR;
-	result = -1;
-      }
+        //fprintf(stderr, "main__data_begin %d > stream->md_len %d\n", si.main_data_begin, stream->md_len);
+        if (result == 0) {
+            stream->error = MAD_ERROR_BADDATAPTR;
+            result = -1;
+        }
     }
     else {
-      mad_bit_init(&ptr,
-		   *stream->main_data + stream->md_len - si.main_data_begin);
-
+      //fprintf(stderr, "b) %p, %d, %d\n", *stream->main_data, stream->md_len, si.main_data_begin);
+      int old_md_len = stream->md_len;
+      
       if (md_len > si.main_data_begin) {
-	assert(stream->md_len + md_len -
-	       si.main_data_begin <= MAD_BUFFER_MDLEN);
-
-	memcpy(*stream->main_data + stream->md_len,
+        assert(stream->md_len + md_len - si.main_data_begin <= MAD_BUFFER_MDLEN);
+        memcpy(*stream->main_data + stream->md_len,
 	       mad_bit_nextbyte(&stream->ptr),
 	       frame_used = md_len - si.main_data_begin);
-	stream->md_len += frame_used;
+        
+        stream->md_len += frame_used;
       }
+      
+      //fprintf(stderr, "a) %p, %d, %d\n", *stream->main_data, stream->md_len, si.main_data_begin);
+      mad_bit_init(&ptr, *stream->main_data + old_md_len - si.main_data_begin);
     }
   }
 
@@ -2721,7 +2716,6 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
 //# endif
 
   /* preload main_data buffer with up to 511 bytes for next frame(s) */
-
   if (frame_free >= next_md_begin) {
     memcpy(*stream->main_data,
 	   stream->next_frame - next_md_begin, next_md_begin);

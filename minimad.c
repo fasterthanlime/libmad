@@ -134,7 +134,7 @@ enum mad_flow output(void *data,
 		     struct mad_pcm *pcm)
 {
   // DEBUG
-  if(STEPS_COUNT++ >= 4) exit(1);
+  //if(STEPS_COUNT++ >= 4) exit(1);
   return MAD_FLOW_CONTINUE;
   // END DEBUG
     
