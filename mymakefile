@@ -1,0 +1,3 @@
+all:
+	gcc -DFLOATING fixed_vs_float.c -o fixed_vs_float -O2 -std=c99 
+	gcc -DFPM_INTEL fixed_vs_float.c fixed.c -o fixed_vs_float2 -O0 -std=c99 

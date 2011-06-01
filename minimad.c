@@ -104,9 +104,16 @@ enum mad_flow input(void *data,
  * use this routine if high-quality output is desired.
  */
 
+static double min = 0.0, max = 0.0, mean = 0.0, allmin = 0.0, allmax = 0.0; 
+
 static inline
 signed int scale(mad_fixed_t sample)
 {
+  double s = mad_f_todouble(sample);
+  if(min > s) min = s;
+  if(max < s) max = s;
+  mean += s * (1.0 / 1152.0);
+    
   /* round */
   sample += (1L << (MAD_F_FRACBITS - 16));
 
@@ -134,8 +141,8 @@ enum mad_flow output(void *data,
 		     struct mad_pcm *pcm)
 {
   // DEBUG
-  //if(STEPS_COUNT++ >= 4) exit(1);
-  return MAD_FLOW_CONTINUE;
+  //if(STEPS_COUNT++ >= 1) exit(1);
+  //return MAD_FLOW_CONTINUE;
   // END DEBUG
     
   unsigned int nchannels, nsamples;
@@ -154,15 +161,23 @@ enum mad_flow output(void *data,
     /* output sample(s) in 16-bit signed little-endian PCM */
 
     sample = scale(*left_ch++);
-    putchar((sample >> 0) & 0xff);
-    putchar((sample >> 8) & 0xff);
+    //putchar((sample >> 0) & 0xff);
+    //putchar((sample >> 8) & 0xff);
 
     if (nchannels == 2) {
       sample = scale(*right_ch++);
-      putchar((sample >> 0) & 0xff);
-      putchar((sample >> 8) & 0xff);
+      //putchar((sample >> 0) & 0xff);
+      //putchar((sample >> 8) & 0xff);
     }
   }
+  
+  fprintf(stderr, "min = %f, max = %f, mean = %f\n", min, max, mean);
+  
+  if(allmin > min) allmin = min;
+  if(allmax < max) allmax = max;
+  mean = 0.0;
+  min = 0.0;
+  max = 0.0;
 
   return MAD_FLOW_CONTINUE;
 }
@@ -224,6 +239,8 @@ int decode(unsigned char const *start, unsigned long length)
   /* release the decoder */
 
   mad_decoder_finish(&decoder);
+  
+  fprintf(stderr, "allmin = %f, allmax = %f\n", allmin, allmax);
 
   return result;
 }

@@ -881,7 +881,6 @@ void III_exponents(struct channel const *channel,
  * NAME:	III_requantize()
  * DESCRIPTION:	requantize one (positive) value
  */
-static
 mad_fixed_t III_requantize(unsigned int value, signed int exp)
 {
   mad_fixed_t requantized;
@@ -890,7 +889,7 @@ mad_fixed_t III_requantize(unsigned int value, signed int exp)
 
   frac = exp % 4;  /* assumes sign(frac) == sign(exp) */
   exp /= 4;
-
+  
   power = &rq_table[value];
   requantized = power->mantissa;
   exp += power->exponent;
@@ -901,7 +900,9 @@ mad_fixed_t III_requantize(unsigned int value, signed int exp)
       requantized = 0;
     }
     else {
+      // requantized += 2^(-(exp + 1))
       requantized += 1L << (-exp - 1);
+      // requantized /= 2^(-exp)
       requantized >>= -exp;
     }
   }
@@ -917,8 +918,12 @@ mad_fixed_t III_requantize(unsigned int value, signed int exp)
     else
       requantized <<= exp;
   }
-
-  return frac ? mad_f_mul(requantized, root_table[3 + frac]) : requantized;
+  
+  if(frac) {
+      return mad_f_mul(requantized, root_table[3 + frac]);
+  } else {
+      return requantized;
+  }
 }
 
 /* we must take care that sz >= bits and sz < sizeof(long) lest bits == 0 */
@@ -960,7 +965,7 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
   cachesz += ((32 - 1 - 24) + (24 - cachesz)) & ~7;
 
   bitcache   = mad_bit_read(&peek, cachesz);
-  fprintf(stderr, "bitcache peek.read = %lu\n", bitcache);
+  //fprintf(stderr, "bitcache peek.read = %lu\n", bitcache);
   bits_left -= cachesz;
 
   xrptr = &xr[0];
@@ -994,6 +999,8 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
       union huffpair const *pair;
       unsigned int clumpsz, value;
       register mad_fixed_t requantized;
+      
+      //fprintf(stderr, "big_values = %d, cachesz = %d, bits_left = %d\n", big_values, cachesz, bits_left);
 
       if (xrptr == sfbound) {
 	sfbound += *sfbwidth++;
@@ -2597,7 +2604,7 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
   error = III_sideinfo(&stream->ptr, nch, header->flags & MAD_FLAG_LSF_EXT,
 		       &si, &data_bitlen, &priv_bitlen);
                
-  fprintf(stderr, "We're at %d, data_bitlen = %d, priv_bitlen = %d\n", stream->ptr.byte - stream->buffer, data_bitlen, priv_bitlen);
+  //fprintf(stderr, "We're at %d, data_bitlen = %d, priv_bitlen = %d\n", stream->ptr.byte - stream->buffer, data_bitlen, priv_bitlen);
                
   if (error && result == 0) {
     stream->error = error;
@@ -2708,11 +2715,13 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
   }
 
 //# if 0 && defined(DEBUG)
+/*
   fprintf(stderr,
 	  "main_data_begin:%u, md_len:%u, frame_free:%u, "
 	  "data_bitlen:%u, anc_bitlen: %u\n",
 	  si.main_data_begin, md_len, frame_free,
 	  data_bitlen, stream->anc_bitlen);
+*/
 //# endif
 
   /* preload main_data buffer with up to 511 bytes for next frame(s) */
