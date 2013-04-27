@@ -19099,7 +19099,9 @@ then
     case "$optimize" in
 	-O|"-O "*)
 	    optimize="-O"
-	    optimize="$optimize -fforce-mem"
+      # this fix from http://blackfin.uclinux.org/gf/project/uclinux-dist/tracker/?action=TrackerItemEdit&tracker_item_id=5626
+      # this option had been removed from gcc 4.3
+	    # optimize="$optimize -fforce-mem"
 	    optimize="$optimize -fforce-addr"
 	    : #x optimize="$optimize -finline-functions"
 	    : #- optimize="$optimize -fstrength-reduce"
